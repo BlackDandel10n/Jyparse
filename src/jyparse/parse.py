@@ -11,3 +11,6 @@ def is_valid_json_string(s):
     if res is None:
         return False
     return res.string == s
+
+def is_valid_json_keyword(s):
+    return s == "false" or s == "true" or s == "null"

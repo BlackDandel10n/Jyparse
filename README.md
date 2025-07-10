@@ -21,3 +21,12 @@ checks if a string is valid JSON string
 is_valid_json_number('"Hello there\\\n"')
 > True
 ```
+
+### is_valid_json_keyword(string)
+
+checks if a string is valid JSON keyword
+
+```python
+is_valid_json_number("null")
+> True
+```
