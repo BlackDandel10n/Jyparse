@@ -1,6 +1,6 @@
 [project]
 name = "jyparse"
-version = "0.1.0"
+version = "0.1.9"
 description = "A JSON parser written in python"
 authors = [
     {name = "BlackDandel10n",email = "blackdandel10n@proton.me"}
