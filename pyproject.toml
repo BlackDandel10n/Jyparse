@@ -1,0 +1,19 @@
+[project]
+name = "jyparse"
+version = "0.1.0"
+description = "A JSON parser written in python"
+authors = [
+    {name = "BlackDandel10n",email = "blackdandel10n@proton.me"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+]
+
+[tool.poetry]
+packages = [{include = "jyparse", from = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
