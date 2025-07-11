@@ -1,5 +1,6 @@
 from re import compile as re_comp
 
+# Exceptions
 class JyparseUnexpectedToken(Exception):
     def __init__(self, char, line, token = ""):
         self.char = char
@@ -26,11 +27,15 @@ class JyparseNoSeperation(Exception):
     def __str__(self):
         return f"Expected comma before {self.token}: at {self.line}-{self.char}"
 
+# Nodes
 class ContaiderNode:
     def __init__(self, typ, parent):
         self.values = []
         self.type = typ
         self.parent = parent
+
+    def __repr__(self):
+        return f"{self.values}"
 
 class Objectnode:
     def __init__(self, key, value):
@@ -109,6 +114,8 @@ def parse(string):
                 # Array
                 case "[":
                     curr = ContaiderNode("ARR", curr)
+                    seperated = False
+                    curr_value = None
                     if root is None:
                         root = curr
                 case "]":
@@ -116,6 +123,8 @@ def parse(string):
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     if (seperated and curr_value is None):
                         raise JyparseTrailingComma(ch + 1, ln)
+                    if curr.parent is not None:
+                        curr.parent.values.append(curr)
                     curr = curr.parent
                 # String
                 case "\"":
@@ -175,3 +184,6 @@ def parse(string):
             ch += 1
 
         ln += 1
+    print(root.values)
+
+parse("[\"name\", [132, false], [null,]]")
