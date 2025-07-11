@@ -113,11 +113,13 @@ def parse(string):
                     curr_value = None
                     if root is None:
                         root = curr
-                case "}":
+                case "}": 
                     if curr is None or curr.type != "OBJ":
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     if (seperated and curr_value is None):
                         raise JyparseTrailingComma(ch + 1, ln)
+                    if curr.type == "OBJ" and not curr_value.has_value:
+                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     # Object as array element
                     if curr.parent is not None:
                         curr.parent.values.append(curr)
@@ -219,6 +221,8 @@ def parse(string):
                     ch += match.end() - 1
                 # Seperator
                 case ",":
+                    if curr.type == "OBJ" and not curr_value.has_value:
+                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     seperated = True
                     if curr_value is None:
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
