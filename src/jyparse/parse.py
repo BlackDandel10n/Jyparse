@@ -5,7 +5,7 @@ class JyparseUnexpectedToken(Exception):
     def __init__(self, char, line, token = ""):
         self.char = char
         self.line = line
-        self.token = token
+        self.token = token 
 
     def __str__(self):
         return f"Unexpected character at {self.line}-{self.char}: {self.token}"
@@ -27,12 +27,23 @@ class JyparseNoSeperation(Exception):
     def __str__(self):
         return f"Expected comma before {self.token}: at {self.line}-{self.char}"
 
+class JyparseContainerLeftOpen(Exception):
+    def __init__(self, char, line, typ):
+        self.type = typ
+        self.char = char
+        self.line = line
+
+    def __str__(self):
+        typ = "Object" if self.type == "OBJ" else "Array"
+        return f"{typ} left open at {self.line}-{self.char}"
+
 # Nodes
 class ContaiderNode:
     def __init__(self, typ, parent):
         self.values = []
         self.type = typ
         self.parent = parent
+        self.closed = False
 
     def __repr__(self):
         return f"{self.values}"
@@ -118,11 +129,14 @@ def parse(string):
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     if (seperated and curr_value is None):
                         raise JyparseTrailingComma(ch + 1, ln)
-                    if curr.type == "OBJ" and not curr_value.has_value:
+                    if curr.type == "OBJ" and curr_value and not curr_value.has_value:
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    # Object as array element
                     if curr.parent is not None:
-                        curr.parent.values.append(curr)
+                    # Object as array element
+                        if curr.parent.type == "ARR":
+                            curr.parent.values.append(curr)
+                            curr_value = curr
+                    curr.closed = True
                     curr = curr.parent
                 # Array
                 case "[":
@@ -136,9 +150,12 @@ def parse(string):
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     if (seperated and curr_value is None):
                         raise JyparseTrailingComma(ch + 1, ln)
-                    # Multi dimentional arrays
                     if curr.parent is not None:
-                        curr.parent.values.append(curr)
+                    # Multi dimentional arrays
+                        if curr.parent.type == "ARR":
+                            curr.parent.values.append(curr)
+                            curr_value = curr
+                    curr.closed = True
                     curr = curr.parent
                 # String
                 case "\"":
@@ -171,6 +188,8 @@ def parse(string):
                     ch += string_match.end() - 1
                 # Keywords
                 case "t" | "f" | "n":
+                    if curr is None:
+                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     match = true_re.match(line[ch:]) or false_re.match(line[ch:]) or null_re.match(line[ch:])
                     if match is None:
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
@@ -196,6 +215,8 @@ def parse(string):
                     ch += match.end() - 1
                 # Number
                 case "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9":
+                    if curr is None:
+                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     match = number_re.match(line[ch:])
                     if match is None:
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
@@ -239,3 +260,5 @@ def parse(string):
             ch += 1
 
         ln += 1
+    if not root.closed:
+        raise JyparseContainerLeftOpen(1, 1, root.type)
