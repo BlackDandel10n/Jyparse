@@ -38,7 +38,7 @@ class JyparseContainerLeftOpen(Exception):
         return f"{typ} left open at {self.string}-{self.char}"
 
 # Nodes
-class ContaiderNode:
+class ContainerNode:
     def __init__(self, typ, parent):
         self.values = []
         self.type = typ
@@ -122,11 +122,23 @@ def parse(string):
         match string[ch]:
             # Object
             case "{":
-                curr = ContaiderNode("OBJ", curr)
-                seperated = False
-                curr_value = None
+                curr = ContainerNode("OBJ", curr)
                 if root is None:
                     root = curr
+                if curr.parent and curr.parent.type == "OBJ":
+                    if curr_value is None:
+                        raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                    else:
+                        if not is_value_ready or curr_value.has_value:
+                            raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                        curr_value.value = curr
+                        curr_value.has_value = True
+                        is_value_ready = False
+                        curr.parent.values.append(curr_value)
+                        curr_value = None
+                else:
+                    curr_value = None
+                seperated = False
             case "}": 
                 if curr is None or curr.type != "OBJ":
                     raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
@@ -135,29 +147,44 @@ def parse(string):
                 if curr.type == "OBJ" and curr_value and not curr_value.has_value:
                     raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
                 if curr.parent is not None:
-                # Object as array element
+                    # Object as array element
                     if curr.parent.type == "ARR":
                         curr.parent.values.append(curr)
                         curr_value = curr
+                    else:
+                        curr_value = curr.parent.values[-1]
                 curr.closed = True
                 curr = curr.parent
             # Array
             case "[":
-                curr = ContaiderNode("ARR", curr)
-                seperated = False
-                curr_value = None
+                curr = ContainerNode("ARR", curr)
                 if root is None:
                     root = curr
+                if curr.parent and curr.parent.type == "OBJ":
+                    if curr_value is None:
+                        raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                    else:
+                        if not is_value_ready or curr_value.has_value:
+                            raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                        curr_value.value = curr
+                        curr_value.has_value = True
+                        is_value_ready = False
+                        curr.parent.values.append(curr_value)
+                else:
+                    curr_value = None
+                seperated = False
             case "]":
                 if curr is None or curr.type != "ARR":
                     raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
                 if (seperated and curr_value is None):
                     raise JyparseTrailingComma(ch - lsch + 1, ln)
                 if curr.parent is not None:
-                # Multi dimentional arrays
+                    # Multi dimentional arrays
                     if curr.parent.type == "ARR":
                         curr.parent.values.append(curr)
                         curr_value = curr
+                    else:
+                        curr_value = curr.parent.values[-1]
                 curr.closed = True
                 curr = curr.parent
             # String
@@ -265,3 +292,4 @@ def parse(string):
 
     if not root.closed:
         raise JyparseContainerLeftOpen(1, 1, root.type)
+
