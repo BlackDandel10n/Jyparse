@@ -38,9 +38,14 @@ class ContaiderNode:
         return f"{self.values}"
 
 class Objectnode:
-    def __init__(self, key, value):
+    value = None
+    has_value = False
+    
+    def __init__(self, key):
         self.key = key
-        self.value = value
+
+    def __repr__(self):
+        return f"<{self.key}: {self.value} : {type(self.value)}>"
 
 def is_valid_json_number(string):
     res = re_comp(r"^-?\d+(\.\d+)?([eE][+\-]?\d+)?$").match(string)
@@ -87,6 +92,7 @@ def parse(string):
     curr = None
     curr_value = None
     seperated = False
+    is_value_ready = False
 
     whitespace = ["\r", " ", "\t"]
     ln = 1
@@ -103,6 +109,8 @@ def parse(string):
                 # Object
                 case "{":
                     curr = ContaiderNode("OBJ", curr)
+                    seperated = False
+                    curr_value = None
                     if root is None:
                         root = curr
                 case "}":
@@ -110,6 +118,9 @@ def parse(string):
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     if (seperated and curr_value is None):
                         raise JyparseTrailingComma(ch + 1, ln)
+                    # Object as array element
+                    if curr.parent is not None:
+                        curr.parent.values.append(curr)
                     curr = curr.parent
                 # Array
                 case "[":
@@ -123,6 +134,7 @@ def parse(string):
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     if (seperated and curr_value is None):
                         raise JyparseTrailingComma(ch + 1, ln)
+                    # Multi dimentional arrays
                     if curr.parent is not None:
                         curr.parent.values.append(curr)
                     curr = curr.parent
@@ -140,7 +152,19 @@ def parse(string):
                         curr.values.append(line[ch + 1:ch + string_match.end() - 1])
                         if curr_value is not None:
                             raise JyparseNoSeperation(ch + 1, ln, line[ch])
-                        curr_value = string_match
+                        curr_value = line[ch + 1:ch + string_match.end() - 1]
+
+                    # Append to Object
+                    if curr.type == "OBJ":
+                        if curr_value is None:
+                            curr_value = Objectnode(line[ch + 1:ch + string_match.end() - 1])
+                            curr.values.append(curr_value)
+                        else:
+                            if not is_value_ready or curr_value.has_value: 
+                                raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
+                            curr_value.value = line[ch + 1:ch + string_match.end() - 1]
+                            curr_value.has_value = True
+                            is_value_ready = False
 
                     ch += string_match.end() - 1
                 # Keywords
@@ -155,7 +179,18 @@ def parse(string):
                         if curr_value is not None:
                             raise JyparseNoSeperation(ch + 1, ln, line[ch])
                         curr_value = match
-                    
+
+                    # Append to Object
+                    if curr.type == "OBJ":
+                        if curr_value is None:
+                            raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
+                        else:
+                            if not is_value_ready or curr_value.has_value:
+                                raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
+                            curr_value.value = convert_keyword(line[ch:ch + match.end()])
+                            curr_value.has_value = True
+                            is_value_ready = False
+
                     ch += match.end() - 1
                 # Number
                 case "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9":
@@ -169,6 +204,17 @@ def parse(string):
                         if curr_value is not None:
                             raise JyparseNoSeperation(ch + 1, ln, line[ch])
                         curr_value = match
+                    
+                    # Append to Object
+                    if curr.type == "OBJ":
+                        if curr_value is None:
+                            raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
+                        else:
+                            if not is_value_ready or curr_value.has_value:
+                                raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
+                            curr_value.value = convert_number(line[ch:ch + match.end()])
+                            curr_value.has_value = True
+                            is_value_ready = False
 
                     ch += match.end() - 1
                 # Seperator
@@ -177,6 +223,11 @@ def parse(string):
                     if curr_value is None:
                         raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
                     curr_value = None
+                # Value assigner
+                case ":":
+                    if curr is None or curr.type != "OBJ" or curr_value is None or is_value_ready:
+                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
+                    is_value_ready = True
                 # Invalid
                 case _:
                     raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
@@ -184,6 +235,3 @@ def parse(string):
             ch += 1
 
         ln += 1
-    print(root.values)
-
-parse("[\"name\", [132, false], [null,]]")
