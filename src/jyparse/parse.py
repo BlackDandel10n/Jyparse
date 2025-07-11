@@ -2,40 +2,40 @@ from re import compile as re_comp
 
 # Exceptions
 class JyparseUnexpectedToken(Exception):
-    def __init__(self, char, line, token = ""):
+    def __init__(self, char, string, token = ""):
         self.char = char
-        self.line = line
+        self.string = string
         self.token = token 
 
     def __str__(self):
-        return f"Unexpected character at {self.line}-{self.char}: {self.token}"
+        return f"Unexpected character at {self.string}-{self.char}: {self.token}"
 
 class JyparseTrailingComma(Exception):
-    def __init__(self, char, line):
+    def __init__(self, char, string):
         self.char = char
-        self.line = line
+        self.string = string
 
     def __str__(self):
-        return f"Trailing comma before {self.line}-{self.char}"
+        return f"Trailing comma before {self.string}-{self.char}"
 
 class JyparseNoSeperation(Exception):
-    def __init__(self, char, line, token):
+    def __init__(self, char, string, token):
         self.char = char
-        self.line = line
+        self.string = string
         self.token = token
 
     def __str__(self):
-        return f"Expected comma before {self.token}: at {self.line}-{self.char}"
+        return f"Expected comma before {self.token}: at {self.string}-{self.char}"
 
 class JyparseContainerLeftOpen(Exception):
-    def __init__(self, char, line, typ):
+    def __init__(self, char, string, typ):
         self.type = typ
         self.char = char
-        self.line = line
+        self.string = string
 
     def __str__(self):
         typ = "Object" if self.type == "OBJ" else "Array"
-        return f"{typ} left open at {self.line}-{self.char}"
+        return f"{typ} left open at {self.string}-{self.char}"
 
 # Nodes
 class ContaiderNode:
@@ -105,160 +105,163 @@ def parse(string):
     seperated = False
     is_value_ready = False
 
-    whitespace = ["\r", " ", "\t"]
+    whitespace = ["\r", " ", "\t", "\n"]
     ln = 1
     ch = 0
+    lsch = 0
 
-    for line in string.split("\n"):
-        while ch < len(line):
-            # Whitespace
-            if line[ch] in whitespace:
-                ch += 1
-                continue
-
-            match line[ch]:
-                # Object
-                case "{":
-                    curr = ContaiderNode("OBJ", curr)
-                    seperated = False
-                    curr_value = None
-                    if root is None:
-                        root = curr
-                case "}": 
-                    if curr is None or curr.type != "OBJ":
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    if (seperated and curr_value is None):
-                        raise JyparseTrailingComma(ch + 1, ln)
-                    if curr.type == "OBJ" and curr_value and not curr_value.has_value:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    if curr.parent is not None:
-                    # Object as array element
-                        if curr.parent.type == "ARR":
-                            curr.parent.values.append(curr)
-                            curr_value = curr
-                    curr.closed = True
-                    curr = curr.parent
-                # Array
-                case "[":
-                    curr = ContaiderNode("ARR", curr)
-                    seperated = False
-                    curr_value = None
-                    if root is None:
-                        root = curr
-                case "]":
-                    if curr is None or curr.type != "ARR":
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    if (seperated and curr_value is None):
-                        raise JyparseTrailingComma(ch + 1, ln)
-                    if curr.parent is not None:
-                    # Multi dimentional arrays
-                        if curr.parent.type == "ARR":
-                            curr.parent.values.append(curr)
-                            curr_value = curr
-                    curr.closed = True
-                    curr = curr.parent
-                # String
-                case "\"":
-                    if curr is None:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    
-                    string_match = string_re.match(line[ch:])
-                    if string_match is None:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    
-                    # Append to Array
-                    if curr.type == "ARR":
-                        curr.values.append(line[ch + 1:ch + string_match.end() - 1])
-                        if curr_value is not None:
-                            raise JyparseNoSeperation(ch + 1, ln, line[ch])
-                        curr_value = line[ch + 1:ch + string_match.end() - 1]
-
-                    # Append to Object
-                    if curr.type == "OBJ":
-                        if curr_value is None:
-                            curr_value = Objectnode(line[ch + 1:ch + string_match.end() - 1])
-                            curr.values.append(curr_value)
-                        else:
-                            if not is_value_ready or curr_value.has_value: 
-                                raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                            curr_value.value = line[ch + 1:ch + string_match.end() - 1]
-                            curr_value.has_value = True
-                            is_value_ready = False
-
-                    ch += string_match.end() - 1
-                # Keywords
-                case "t" | "f" | "n":
-                    if curr is None:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    match = true_re.match(line[ch:]) or false_re.match(line[ch:]) or null_re.match(line[ch:])
-                    if match is None:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-
-                    # Append to Array
-                    if curr.type == "ARR":
-                        curr.values.append(convert_keyword(line[ch:ch + match.end()]))
-                        if curr_value is not None:
-                            raise JyparseNoSeperation(ch + 1, ln, line[ch])
-                        curr_value = match
-
-                    # Append to Object
-                    if curr.type == "OBJ":
-                        if curr_value is None:
-                            raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                        else:
-                            if not is_value_ready or curr_value.has_value:
-                                raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                            curr_value.value = convert_keyword(line[ch:ch + match.end()])
-                            curr_value.has_value = True
-                            is_value_ready = False
-
-                    ch += match.end() - 1
-                # Number
-                case "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9":
-                    if curr is None:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    match = number_re.match(line[ch:])
-                    if match is None:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-
-                    # Append to Array
-                    if curr.type == "ARR":
-                        curr.values.append(convert_number(line[ch:ch + match.end()]))
-                        if curr_value is not None:
-                            raise JyparseNoSeperation(ch + 1, ln, line[ch])
-                        curr_value = match
-                    
-                    # Append to Object
-                    if curr.type == "OBJ":
-                        if curr_value is None:
-                            raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                        else:
-                            if not is_value_ready or curr_value.has_value:
-                                raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                            curr_value.value = convert_number(line[ch:ch + match.end()])
-                            curr_value.has_value = True
-                            is_value_ready = False
-
-                    ch += match.end() - 1
-                # Seperator
-                case ",":
-                    if curr.type == "OBJ" and not curr_value.has_value:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    seperated = True
-                    if curr_value is None:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    curr_value = None
-                # Value assigner
-                case ":":
-                    if curr is None or curr.type != "OBJ" or curr_value is None or is_value_ready:
-                        raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-                    is_value_ready = True
-                # Invalid
-                case _:
-                    raise JyparseUnexpectedToken(ch + 1, ln, line[ch])
-
+    while ch < len(string):
+        # Whitespace
+        if string[ch] in whitespace:
+            if string[ch] == "\n":
+                ln += 1
+                lsch = ch + 1
             ch += 1
+            continue
 
-        ln += 1
+        match string[ch]:
+            # Object
+            case "{":
+                curr = ContaiderNode("OBJ", curr)
+                seperated = False
+                curr_value = None
+                if root is None:
+                    root = curr
+            case "}": 
+                if curr is None or curr.type != "OBJ":
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                if (seperated and curr_value is None):
+                    raise JyparseTrailingComma(ch - lsch + 1, ln)
+                if curr.type == "OBJ" and curr_value and not curr_value.has_value:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                if curr.parent is not None:
+                # Object as array element
+                    if curr.parent.type == "ARR":
+                        curr.parent.values.append(curr)
+                        curr_value = curr
+                curr.closed = True
+                curr = curr.parent
+            # Array
+            case "[":
+                curr = ContaiderNode("ARR", curr)
+                seperated = False
+                curr_value = None
+                if root is None:
+                    root = curr
+            case "]":
+                if curr is None or curr.type != "ARR":
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                if (seperated and curr_value is None):
+                    raise JyparseTrailingComma(ch - lsch + 1, ln)
+                if curr.parent is not None:
+                # Multi dimentional arrays
+                    if curr.parent.type == "ARR":
+                        curr.parent.values.append(curr)
+                        curr_value = curr
+                curr.closed = True
+                curr = curr.parent
+            # String
+            case "\"":
+                if curr is None:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                
+                string_match = string_re.match(string[ch:])
+                if string_match is None:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                
+                # Append to Array
+                if curr.type == "ARR":
+                    curr.values.append(string[ch + 1:ch + string_match.end() - 1])
+                    if curr_value is not None:
+                        raise JyparseNoSeperation(ch - lsch + 1, ln, string[ch])
+                    curr_value = string[ch + 1:ch + string_match.end() - 1]
+
+                # Append to Object
+                if curr.type == "OBJ":
+                    if curr_value is None:
+                        curr_value = Objectnode(string[ch + 1:ch + string_match.end() - 1])
+                        curr.values.append(curr_value)
+                    else:
+                        if not is_value_ready or curr_value.has_value: 
+                            raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                        curr_value.value = string[ch + 1:ch + string_match.end() - 1]
+                        curr_value.has_value = True
+                        is_value_ready = False
+
+                ch += string_match.end() - 1
+            # Keywords
+            case "t" | "f" | "n":
+                if curr is None:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                match = true_re.match(string[ch:]) or false_re.match(string[ch:]) or null_re.match(string[ch:])
+                if match is None:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+
+                # Append to Array
+                if curr.type == "ARR":
+                    curr.values.append(convert_keyword(string[ch:ch + match.end()]))
+                    if curr_value is not None:
+                        raise JyparseNoSeperation(ch - lsch + 1, ln, string[ch])
+                    curr_value = match
+
+                # Append to Object
+                if curr.type == "OBJ":
+                    if curr_value is None:
+                        raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                    else:
+                        if not is_value_ready or curr_value.has_value:
+                            raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                        curr_value.value = convert_keyword(string[ch:ch + match.end()])
+                        curr_value.has_value = True
+                        is_value_ready = False
+
+                ch += match.end() - 1
+            # Number
+            case "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9":
+                if curr is None:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                match = number_re.match(string[ch:])
+                if match is None:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+
+                # Append to Array
+                if curr.type == "ARR":
+                    curr.values.append(convert_number(string[ch:ch + match.end()]))
+                    if curr_value is not None:
+                        raise JyparseNoSeperation(ch - lsch + 1, ln, string[ch])
+                    curr_value = match
+                
+                # Append to Object
+                if curr.type == "OBJ":
+                    if curr_value is None:
+                        raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                    else:
+                        if not is_value_ready or curr_value.has_value:
+                            raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                        curr_value.value = convert_number(string[ch:ch + match.end()])
+                        curr_value.has_value = True
+                        is_value_ready = False
+
+                ch += match.end() - 1
+            # Seperator
+            case ",":
+                if curr.type == "OBJ" and not curr_value.has_value:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                seperated = True
+                if curr_value is None:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                curr_value = None
+            # Value assigner
+            case ":":
+                if curr is None or curr.type != "OBJ" or curr_value is None or is_value_ready:
+                    raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+                is_value_ready = True
+            # Invalid
+            case _:
+                print(string[:ch - lsch + 1])
+                raise JyparseUnexpectedToken(ch - lsch + 1, ln, string[ch])
+
+        ch += 1
+
     if not root.closed:
         raise JyparseContainerLeftOpen(1, 1, root.type)
