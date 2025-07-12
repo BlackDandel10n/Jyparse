@@ -58,22 +58,22 @@ class Objectnode:
     def __repr__(self):
         return f"<{self.key}: {self.value} : {type(self.value)}>"
 
-def is_valid_json_number(string):
+def is_valid_json_number(string:str):
     res = re_comp(r"^-?\d+(\.\d+)?([eE][+\-]?\d+)?$").match(string)
     if res is None:
         return False
     return res.string == string
 
-def is_valid_json_string(string):
+def is_valid_json_string(string:str):
     res = re_comp(r"^\"([^\"\\]?(\\[\"\\\/bfnrt])?(\\u[0-9a-fA-F]{4})?)*\"$").match(string)
     if res is None:
         return False
     return res.string == string
 
-def is_valid_json_keyword(string):
+def is_valid_json_keyword(string:str):
     return string == "false" or string == "true" or string == "null"
 
-def convert_keyword(string):
+def convert_keyword(string:str):
     match string:
         case "true":
             return True
@@ -82,7 +82,7 @@ def convert_keyword(string):
         case "null":
             return None
 
-def convert_number(string):
+def convert_number(string:str):
     try:
         return int(string)
     except ValueError:
@@ -91,7 +91,29 @@ def convert_number(string):
         except ValueError:
             return complex(string)
 
-def parse(string):
+def parse_container_node(node:ContainerNode):
+    res = None
+    
+    if node.type == "ARR":
+        res = []
+        for el in node.values:
+            if isinstance(el, ContainerNode):
+                res.append(parse_container_node(el))
+            else:
+                res.append(el)
+    else:
+        res = {}
+        for el in node.values:
+            if not isinstance(el, Objectnode):
+                return None
+            if isinstance(el, ContainerNode):
+                res[el.key] = parse_container_node(el.value)
+            else:
+                res[el.key] = el.value
+
+    return res
+
+def parse(string:str):
     # Scanners
     string_re = re_comp(r"\"([^\"\\]?(\\[\"\\\/bfnrt])?(\\u[0-9a-fA-F]{4})?)*?\"")
     true_re = re_comp(r"true")
@@ -170,7 +192,6 @@ def parse(string):
                         curr_value.has_value = True
                         is_value_ready = False
                         curr.parent.values.append(curr_value)
-                else:
                     curr_value = None
                 seperated = False
             case "]":
@@ -292,4 +313,10 @@ def parse(string):
 
     if not root.closed:
         raise JyparseContainerLeftOpen(1, 1, root.type)
+    
+    res = {
+        "type": "list" if root.type == "ARR" else "dict",
+        "data": parse_container_node(root)
+    }
 
+    return res
