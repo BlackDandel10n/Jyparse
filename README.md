@@ -4,6 +4,8 @@ A JSON parser for python
 
 ## jyparse.parse
 
+from JSON to python data types
+
 ### is_valid_json_number(num_string)
 
 checks if a number string is valid JSON number
@@ -48,3 +50,6 @@ parse container node (special Jyparse classes to standard data type)
 parse_container_node(ContainerNode("ARR", None))
 > []
 ```
+## jyparse.dump
+
+from python data type to JSON
